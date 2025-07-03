@@ -1,15 +1,11 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 // Game state
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 const world = new CANNON.World()
-
-// Controls
-let controls: OrbitControls
 
 // Game objects
 const spaceships: THREE.Mesh[] = []
@@ -19,6 +15,25 @@ const asteroids: { mesh: THREE.Mesh; body: CANNON.Body }[] = []
 let score = 0
 let asteroidsDestroyed = 0
 
+// --- CONTROL CONSTANTS ---
+const shipAcceleration = 10 // units/sec^2
+const shipMaxSpeed = 18
+const shipDamping = 0.995 // 1 = no friction, <1 = some friction
+const angularDamping = 0.96 // for smooth rotation
+const mouseSensitivity = 0.002 // tweak for feel
+
+// --- CONTROL STATE ---
+let shipVelocity = new THREE.Vector3(0, 0, 0)
+let shipAngularVelocity = new THREE.Vector2(0, 0) // x: pitch, y: yaw
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false
+let moveUp = false, moveDown = false
+
+let bullets: { mesh: THREE.Mesh, velocity: THREE.Vector3, spawnTime: number }[] = []
+const bulletSpeed = 3
+const bulletLifetime = 5 // seconds
+let lastShotTime = 0
+const shootCooldown = 0.2 // seconds
+
 function init() {
   // Setup renderer
   renderer.setSize(window.innerWidth, window.innerHeight)
@@ -26,6 +41,7 @@ function init() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.setClearColor(0x000011)
   document.getElementById('app')?.appendChild(renderer.domElement)
+  renderer.domElement.style.cursor = 'none'
 
   // Setup physics world
   world.gravity.set(0, 0, 0) // Space physics
@@ -33,11 +49,6 @@ function init() {
 
   // Setup camera
   camera.position.set(0, 10, 20)
-  
-  // Setup controls
-  controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true
-  controls.dampingFactor = 0.05
 
   // Add lighting
   const ambientLight = new THREE.AmbientLight(0x404040, 0.3)
@@ -122,10 +133,10 @@ function createAsteroidField() {
 
 function setupEventListeners() {
   window.addEventListener('resize', onWindowResize)
-  window.addEventListener('click', onMouseClick)
-  
-  // Keyboard controls (to be expanded in Milestone 1)
+  window.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
 }
 
 function onWindowResize() {
@@ -134,41 +145,129 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight)
 }
 
-function onMouseClick(event: MouseEvent) {
-  // Basic raycast shooting (to be expanded in Milestone 1)
-  const raycaster = new THREE.Raycaster()
-  const mouse = new THREE.Vector2()
-  
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
-  
-  raycaster.setFromCamera(mouse, camera)
-  
-  const asteroidMeshes = asteroids.map(a => a.mesh)
-  const intersects = raycaster.intersectObjects(asteroidMeshes)
-  
-  if (intersects.length > 0) {
-    const hit = intersects[0]
-    destroyAsteroid(hit.object as THREE.Mesh)
+function onMouseDown(event: MouseEvent) {
+  if (event.button === 0) {
+    shootBullet()
   }
 }
 
+function onMouseMove(event: MouseEvent) {
+  const dx = event.movementX || 0
+  const dy = event.movementY || 0
+  shipAngularVelocity.y -= dx * mouseSensitivity
+  shipAngularVelocity.x -= dy * mouseSensitivity
+}
+
 function onKeyDown(event: KeyboardEvent) {
-  // Placeholder for WASD controls (Milestone 1)
   switch (event.code) {
-    case 'KeyW':
-      console.log('Forward thrust')
-      break
-    case 'KeyS':
-      console.log('Reverse thrust')
-      break
-    case 'KeyA':
-      console.log('Turn left')
-      break
-    case 'KeyD':
-      console.log('Turn right')
-      break
+    case 'KeyW': moveForward = true; break
+    case 'KeyS': moveBackward = true; break
+    case 'KeyA': moveLeft = true; break
+    case 'KeyD': moveRight = true; break
+    case 'Space': moveUp = true; break
+    case 'ControlLeft':
+    case 'ControlRight': moveDown = true; break
   }
+}
+
+function onKeyUp(event: KeyboardEvent) {
+  switch (event.code) {
+    case 'KeyW': moveForward = false; break
+    case 'KeyS': moveBackward = false; break
+    case 'KeyA': moveLeft = false; break
+    case 'KeyD': moveRight = false; break
+    case 'Space': moveUp = false; break
+    case 'ControlLeft':
+    case 'ControlRight': moveDown = false; break
+  }
+}
+
+function shootBullet() {
+  const now = performance.now() / 1000
+  if (now - lastShotTime < shootCooldown) return
+  lastShotTime = now
+  const ship = spaceships[0]
+  const dir = new THREE.Vector3(0, 0, -1)
+  dir.applyQuaternion(ship.quaternion)
+  const bulletGeo = new THREE.SphereGeometry(0.2, 8, 8)
+  const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 })
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat)
+  bullet.position.copy(ship.position)
+  scene.add(bullet)
+  // Bullet velocity = base + ship's current velocity
+  const bulletVel = dir.clone().multiplyScalar(bulletSpeed).add(shipVelocity.clone())
+  bullets.push({ mesh: bullet, velocity: bulletVel, spawnTime: now })
+}
+
+function updateSpaceship(dt: number) {
+  const ship = spaceships[0]
+  // --- ROTATION (mouse) ---
+  // Clamp pitch to avoid flipping
+  const maxPitch = Math.PI / 2 - 0.1
+  let euler = new THREE.Euler().setFromQuaternion(ship.quaternion, 'YXZ')
+  euler.x += shipAngularVelocity.x
+  euler.y += shipAngularVelocity.y
+  euler.x = Math.max(-maxPitch, Math.min(maxPitch, euler.x))
+  ship.quaternion.setFromEuler(euler)
+  // Damping for smooth stop
+  shipAngularVelocity.multiplyScalar(angularDamping)
+
+  // --- TRANSLATION (WASD/Space/Ctrl) ---
+  const accel = new THREE.Vector3()
+  if (moveForward) accel.z -= 1
+  if (moveBackward) accel.z += 1
+  if (moveLeft) accel.x -= 1
+  if (moveRight) accel.x += 1
+  if (moveUp) accel.y += 1
+  if (moveDown) accel.y -= 1
+  if (accel.lengthSq() > 0) {
+    accel.normalize()
+    accel.applyQuaternion(ship.quaternion)
+    accel.multiplyScalar(shipAcceleration * dt)
+    shipVelocity.add(accel)
+  }
+  // Clamp speed
+  if (shipVelocity.length() > shipMaxSpeed) {
+    shipVelocity.setLength(shipMaxSpeed)
+  }
+  // Apply damping
+  shipVelocity.multiplyScalar(shipDamping)
+  // Update position
+  ship.position.add(shipVelocity.clone().multiplyScalar(dt))
+}
+
+function updateBullets(dt: number) {
+  const now = performance.now() / 1000
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i]
+    b.mesh.position.add(b.velocity.clone().multiplyScalar(dt))
+    // Lifetime
+    if (now - b.spawnTime > bulletLifetime) {
+      scene.remove(b.mesh)
+      bullets.splice(i, 1)
+      continue
+    }
+    // Collision with asteroids
+    for (let j = asteroids.length - 1; j >= 0; j--) {
+      const a = asteroids[j]
+      // Increase hitbox radius for easier hits
+      if (b.mesh.position.distanceTo(a.mesh.position) < 2.0) {
+        destroyAsteroid(a.mesh)
+        scene.remove(b.mesh)
+        bullets.splice(i, 1)
+        break
+      }
+    }
+  }
+}
+
+function updateCamera() {
+  const ship = spaceships[0]
+  // Third-person follow: behind and above
+  const offset = new THREE.Vector3(0, 6, 14)
+  offset.applyQuaternion(ship.quaternion)
+  camera.position.copy(ship.position.clone().add(offset))
+  camera.lookAt(ship.position)
 }
 
 function destroyAsteroid(asteroidMesh: THREE.Mesh) {
@@ -203,20 +302,15 @@ function updateUI() {
 
 function animate() {
   requestAnimationFrame(animate)
-  
-  // Update physics
-  world.step(1/60)
-  
-  // Sync physics bodies with meshes
+  const dt = 1/60
+  world.step(dt)
   asteroids.forEach(asteroid => {
     asteroid.mesh.position.copy(asteroid.body.position as any)
     asteroid.mesh.quaternion.copy(asteroid.body.quaternion as any)
   })
-  
-  // Update controls
-  controls.update()
-  
-  // Render
+  updateSpaceship(dt)
+  updateBullets(dt)
+  updateCamera()
   renderer.render(scene, camera)
 }
 
