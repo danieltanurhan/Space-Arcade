@@ -1,0 +1,31 @@
+{
+  "hash": "49dc83f9",
+  "configHash": "6e8be24c",
+  "lockfileHash": "16b823c6",
+  "browserHash": "2781fb77",
+  "optimized": {
+    "three": {
+      "src": "../../node_modules/three/build/three.module.js",
+      "file": "three.js",
+      "fileHash": "033ab74e",
+      "needsInterop": false
+    },
+    "cannon-es": {
+      "src": "../../node_modules/cannon-es/dist/cannon-es.js",
+      "file": "cannon-es.js",
+      "fileHash": "89f47e06",
+      "needsInterop": false
+    },
+    "three/examples/jsm/loaders/GLTFLoader.js": {
+      "src": "../../node_modules/three/examples/jsm/loaders/GLTFLoader.js",
+      "file": "three_examples_jsm_loaders_GLTFLoader__js.js",
+      "fileHash": "5f8a15fb",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-BQEVJPUQ": {
+      "file": "chunk-BQEVJPUQ.js"
+    }
+  }
+}

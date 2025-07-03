@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 // Game state
 const scene = new THREE.Scene()
@@ -10,6 +11,7 @@ const world = new CANNON.World()
 // Game objects
 const spaceships: THREE.Mesh[] = []
 const asteroids: { mesh: THREE.Mesh; body: CANNON.Body }[] = []
+let crosshair: THREE.LineSegments
 
 // Stats
 let score = 0
@@ -29,7 +31,7 @@ let moveForward = false, moveBackward = false, moveLeft = false, moveRight = fal
 let moveUp = false, moveDown = false
 
 let bullets: { mesh: THREE.Mesh, velocity: THREE.Vector3, spawnTime: number }[] = []
-const bulletSpeed = 3
+const bulletSpeed = 30
 const bulletLifetime = 5 // seconds
 let lastShotTime = 0
 const shootCooldown = 0.2 // seconds
@@ -65,6 +67,9 @@ function init() {
   // Create asteroid field
   createAsteroidField()
 
+  // Create crosshair
+  createCrosshair()
+
   // Setup event listeners
   setupEventListeners()
 
@@ -72,14 +77,42 @@ function init() {
 }
 
 function createSpaceship() {
-  // Placeholder cube spaceship as per Milestone 0
-  const geometry = new THREE.BoxGeometry(2, 1, 4)
-  const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 })
-  const spaceship = new THREE.Mesh(geometry, material)
-  spaceship.position.set(0, 0, 0)
-  spaceship.castShadow = true
-  scene.add(spaceship)
-  spaceships.push(spaceship)
+  const loader = new GLTFLoader();
+  console.log('Loading ship model from /models/spaceship/ship1.glb...');
+  
+  loader.load(
+    '/models/spaceship/ship1.glb', // path relative to public/
+    (gltf) => {
+      console.log('Ship model loaded successfully:', gltf);
+      const ship = gltf.scene;
+      ship.position.set(0, 0, 0);
+      ship.scale.set(5, 5, 5); // Make it bigger
+      ship.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(ship);
+      spaceships.push(ship as any); // 'as any' to match spaceships type
+      console.log('Ship added to scene and spaceships array');
+    },
+    (progress) => {
+      console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
+    },
+    (error) => {
+      console.error('Error loading ship model:', error);
+      // Fallback to cube if model fails to load
+      console.log('Creating fallback cube ship...');
+      const geometry = new THREE.BoxGeometry(2, 1, 4);
+      const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+      const spaceship = new THREE.Mesh(geometry, material);
+      spaceship.position.set(0, 0, 0);
+      spaceship.castShadow = true;
+      scene.add(spaceship);
+      spaceships.push(spaceship);
+    }
+  );
 }
 
 function createAsteroidField() {
@@ -129,6 +162,25 @@ function createAsteroidField() {
 
     asteroids.push({ mesh: asteroid, body })
   }
+}
+
+function createCrosshair() {
+  const crosshairGeometry = new THREE.BufferGeometry();
+  const crosshairMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+  
+  // Create a simple crosshair shape
+  const points = [
+    // Horizontal line
+    new THREE.Vector3(-0.5, 0, 0),
+    new THREE.Vector3(0.5, 0, 0),
+    // Vertical line
+    new THREE.Vector3(0, -0.5, 0),
+    new THREE.Vector3(0, 0.5, 0),
+  ];
+  
+  crosshairGeometry.setFromPoints(points);
+  crosshair = new THREE.LineSegments(crosshairGeometry, crosshairMaterial);
+  scene.add(crosshair);
 }
 
 function setupEventListeners() {
@@ -189,10 +241,18 @@ function shootBullet() {
   const ship = spaceships[0]
   const dir = new THREE.Vector3(0, 0, -1)
   dir.applyQuaternion(ship.quaternion)
-  const bulletGeo = new THREE.SphereGeometry(0.2, 8, 8)
-  const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 })
+  // Create laser beam geometry (thin cylinder)
+  const bulletGeo = new THREE.CylinderGeometry(0.05, 0.05, 2, 8)
+  const bulletMat = new THREE.MeshBasicMaterial({ color: 0xff0000 })
   const bullet = new THREE.Mesh(bulletGeo, bulletMat)
+  
+  // Position bullet at ship's position
   bullet.position.copy(ship.position)
+  
+  // Orient bullet to point in direction of travel
+  const bulletDirection = dir.clone().normalize()
+  bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bulletDirection)
+  
   scene.add(bullet)
   // Bullet velocity = base + ship's current velocity
   const bulletVel = dir.clone().multiplyScalar(bulletSpeed).add(shipVelocity.clone())
@@ -268,6 +328,15 @@ function updateCamera() {
   offset.applyQuaternion(ship.quaternion)
   camera.position.copy(ship.position.clone().add(offset))
   camera.lookAt(ship.position)
+  
+  // Update crosshair position to show where ship is aiming
+  if (crosshair) {
+    const aimDistance = 20; // Distance in front of ship
+    const aimDirection = new THREE.Vector3(0, 0, -1);
+    aimDirection.applyQuaternion(ship.quaternion);
+    crosshair.position.copy(ship.position.clone().add(aimDirection.multiplyScalar(aimDistance)));
+    crosshair.lookAt(camera.position); // Make crosshair face camera
+  }
 }
 
 function destroyAsteroid(asteroidMesh: THREE.Mesh) {
