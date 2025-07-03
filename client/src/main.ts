@@ -26,9 +26,11 @@ const mouseSensitivity = 0.002 // tweak for feel
 
 // --- CONTROL STATE ---
 let shipVelocity = new THREE.Vector3(0, 0, 0)
-let shipAngularVelocity = new THREE.Vector2(0, 0) // x: pitch, y: yaw
+let shipRotationX = 0 // Pitch (up/down)
+let shipRotationY = 0 // Yaw (left/right)
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false
 let moveUp = false, moveDown = false
+let isPointerLocked = false
 
 let bullets: { mesh: THREE.Mesh, velocity: THREE.Vector3, spawnTime: number }[] = []
 const bulletSpeed = 30
@@ -189,6 +191,9 @@ function setupEventListeners() {
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  // Pointer lock events
+  document.addEventListener('pointerlockchange', onPointerLockChange)
+  document.addEventListener('pointerlockerror', onPointerLockError)
 }
 
 function onWindowResize() {
@@ -199,15 +204,24 @@ function onWindowResize() {
 
 function onMouseDown(event: MouseEvent) {
   if (event.button === 0) {
+    // Try to lock pointer on first click
+    if (!isPointerLocked) {
+      renderer.domElement.requestPointerLock()
+      return
+    }
     shootBullet()
   }
 }
 
 function onMouseMove(event: MouseEvent) {
+  // Only handle mouse movement when pointer is locked
+  if (!isPointerLocked) return
+  
   const dx = event.movementX || 0
   const dy = event.movementY || 0
-  shipAngularVelocity.y -= dx * mouseSensitivity
-  shipAngularVelocity.x -= dy * mouseSensitivity
+  // Update rotation angles (infinite rotation)
+  shipRotationY -= dx * mouseSensitivity
+  shipRotationX -= dy * mouseSensitivity
 }
 
 function onKeyDown(event: KeyboardEvent) {
@@ -219,6 +233,12 @@ function onKeyDown(event: KeyboardEvent) {
     case 'Space': moveUp = true; break
     case 'ControlLeft':
     case 'ControlRight': moveDown = true; break
+    case 'Escape':
+      // Unlock pointer on Escape
+      if (isPointerLocked) {
+        document.exitPointerLock()
+      }
+      break
   }
 }
 
@@ -261,16 +281,11 @@ function shootBullet() {
 
 function updateSpaceship(dt: number) {
   const ship = spaceships[0]
-  // --- ROTATION (mouse) ---
-  // Clamp pitch to avoid flipping
-  const maxPitch = Math.PI / 2 - 0.1
-  let euler = new THREE.Euler().setFromQuaternion(ship.quaternion, 'YXZ')
-  euler.x += shipAngularVelocity.x
-  euler.y += shipAngularVelocity.y
-  euler.x = Math.max(-maxPitch, Math.min(maxPitch, euler.x))
-  ship.quaternion.setFromEuler(euler)
-  // Damping for smooth stop
-  shipAngularVelocity.multiplyScalar(angularDamping)
+  // --- ROTATION (camera-relative, no flipping) ---
+  // Create rotation quaternion from accumulated angles
+  const rotationQuat = new THREE.Quaternion()
+  rotationQuat.setFromEuler(new THREE.Euler(shipRotationX, shipRotationY, 0, 'YXZ'))
+  ship.quaternion.copy(rotationQuat)
 
   // --- TRANSLATION (WASD/Space/Ctrl) ---
   const accel = new THREE.Vector3()
@@ -323,10 +338,22 @@ function updateBullets(dt: number) {
 
 function updateCamera() {
   const ship = spaceships[0]
-  // Third-person follow: behind and above
-  const offset = new THREE.Vector3(0, 6, 14)
-  offset.applyQuaternion(ship.quaternion)
-  camera.position.copy(ship.position.clone().add(offset))
+  // Get ship's forward direction (where it's aiming)
+  const shipForward = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.quaternion)
+  
+  // Calculate camera position behind and above the ship
+  const cameraDistance = 14
+  const cameraHeight = 6
+  const cameraOffset = new THREE.Vector3(0, cameraHeight, cameraDistance)
+  
+  // Apply ship's pitch and yaw to camera offset, but keep it upright
+  const shipEuler = new THREE.Euler().setFromQuaternion(ship.quaternion, 'YXZ')
+  const cameraRotation = new THREE.Euler(shipEuler.x, shipEuler.y, 0, 'YXZ')
+  cameraOffset.applyEuler(cameraRotation)
+  
+  camera.position.copy(ship.position.clone().add(cameraOffset))
+  
+  // Look at ship
   camera.lookAt(ship.position)
   
   // Update crosshair position to show where ship is aiming
@@ -389,3 +416,12 @@ animate()
 updateUI()
 
 console.log('🎮 Space Arcade loading...')
+
+function onPointerLockChange() {
+  isPointerLocked = document.pointerLockElement === renderer.domElement
+  console.log('Pointer lock:', isPointerLocked ? 'locked' : 'unlocked')
+}
+
+function onPointerLockError() {
+  console.error('Pointer lock failed')
+}
