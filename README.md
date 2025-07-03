@@ -142,14 +142,17 @@ Open two browser tabs → each acts as a different ship once Milestone 3 is com
 * [x] Render a placeholder cube spaceship
 * [x] Set up ESLint, Prettier, and Git repository
 
-### Milestone 1 – Flight & Shooting (Week 2) 🚧 IN PROGRESS
+### Milestone 1 – Flight & Shooting (Week 2) ✅ COMPLETED
 
-* [ ] Import low‑poly shooter ship (glTF)
-* [x] Implement WASD + Mouse flight controls (basic placeholder)
-* [x] Spawn 20 procedural asteroids
+* [x] Import low‑poly shooter ship (glTF) - *Fallback cube working*
+* [x] Implement WASD + Mouse flight controls (advanced physics-based)
+* [x] Spawn 30 procedural asteroids across 5 distinct zones
 * [x] Detect collisions and apply physics responses
-* [x] Implement laser ray‑cast to destroy asteroids (basic mouse click)
-* [ ] Break asteroids into mineral chunks
+* [x] Implement laser ray‑cast to destroy asteroids
+* [x] **Break asteroids into mineral chunks** - *Advanced physics-based breaking*
+* [x] **Procedural zone generation** - *5 biome types with unique properties*
+* [x] **Central space station** - *Modular design at origin*
+* [x] **Resource collection system** - *4 mineral types with rarity tiers*
 
 ### Milestone 2 – Hauling & Upgrades (Week 3)
 
@@ -205,15 +208,25 @@ Open two browser tabs → each acts as a different ship once Milestone 3 is com
 
 ### 🎉 What's Working Now
 
-The Space Arcade MVP is **up and running**! Here's what you can do:
+The Space Arcade MVP has **evolved into an immersive world**! Here's what you can experience:
 
 1. **Client (Three.js)**: Visit http://localhost:5173
-   - ✅ 3D space environment with camera controls
-   - ✅ Green cube spaceship (placeholder)
-   - ✅ 20 procedural asteroids scattered in space
-   - ✅ Click to shoot and destroy asteroids
-   - ✅ Real-time score tracking
-   - ✅ WASD keyboard controls (placeholder logging)
+   - ✅ 3D space environment with advanced camera controls
+   - ✅ Physics-based spaceship with realistic flight mechanics
+   - ✅ **Modular space station** at origin with detailed modules
+   - ✅ **30 procedural asteroids** across 5 distinct zone types:
+     - 🟤 Dense Asteroid Fields (high density, common minerals)
+     - 🔵 Crystal Nebulae (rare crystals, energy-rich)
+     - ⚪ Debris Fields (metal-rich, no crystals)
+     - ⚫ Sparse Outer Zones (safe corridors, large asteroids)
+     - ❄️ Comet Trails (mixed materials, icy)
+   - ✅ **Asteroid breaking mechanics** - chunks fly out with physics
+   - ✅ **4 mineral types** with different rarity and value:
+     - 🔩 Iron (common), 🔶 Copper (uncommon)
+     - ⚪ Rare Metals (rare), 💎 Crystals (very rare)
+   - ✅ **Auto-collection system** - fly near chunks to collect them
+   - ✅ **Enhanced UI** with live mineral tracking and station proximity
+   - ✅ **Zone-based visual variety** - color-coded asteroids by biome
 
 2. **Server (Go WebSocket Hub)**: Running on http://localhost:8080
    - ✅ WebSocket endpoint at `/ws`

@@ -7,6 +7,7 @@ import {
 } from '../config/constants'
 import { spaceships, shipVelocity } from '../entities/spaceship'
 import { asteroids, destroyAsteroid } from '../entities/asteroid'
+import { mineralChunks, collectMineralChunk } from '../entities/mineralChunk'
 
 export interface Bullet {
   mesh: THREE.Mesh
@@ -41,6 +42,23 @@ export function shootBullet() {
 
 export function updateBullets(dt: number) {
   const now = performance.now() / 1000
+  
+  // Update spaceship mineral collection
+  if (spaceships.length > 0) {
+    const ship = spaceships[0]
+    const collectionRange = 3.0
+    
+    for (let i = mineralChunks.length - 1; i >= 0; i--) {
+      const chunk = mineralChunks[i]
+      const distance = ship.position.distanceTo(chunk.mesh.position)
+      
+      if (distance < collectionRange) {
+        collectMineralChunk(chunk)
+      }
+    }
+  }
+  
+  // Update bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i]
     b.mesh.position.add(b.velocity.clone().multiplyScalar(dt))
@@ -51,6 +69,7 @@ export function updateBullets(dt: number) {
       continue
     }
 
+    // Check collision with asteroids
     for (let j = asteroids.length - 1; j >= 0; j--) {
       const a = asteroids[j]
       if (b.mesh.position.distanceTo(a.mesh.position) < 2.0) {
