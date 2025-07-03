@@ -134,21 +134,21 @@ Open two browser tabs → each acts as a different ship once Milestone 3 is com
 
 > Tick off as you go – Cursor’s ✅ will keep you honest.
 
-### Milestone 0 – Project Skeleton (Week 0–1)
+### Milestone 0 – Project Skeleton (Week 0–1) ✅ COMPLETED
 
-* [ ] Initialize Vite + Three.js TypeScript project (`npm create vite@latest my-space-arcade -- --template vanilla-ts`)
-* [ ] Integrate Three.js r164 and OrbitControls
-* [ ] Add cannon‑es physics engine
-* [ ] Render a placeholder cube spaceship
-* [ ] Set up ESLint, Prettier, and Git repository
+* [x] Initialize Vite + Three.js TypeScript project (`npm create vite@latest my-space-arcade -- --template vanilla-ts`)
+* [x] Integrate Three.js r164 and OrbitControls
+* [x] Add cannon‑es physics engine
+* [x] Render a placeholder cube spaceship
+* [x] Set up ESLint, Prettier, and Git repository
 
-### Milestone 1 – Flight & Shooting (Week 2)
+### Milestone 1 – Flight & Shooting (Week 2) 🚧 IN PROGRESS
 
 * [ ] Import low‑poly shooter ship (glTF)
-* [ ] Implement WASD + Mouse flight controls
-* [ ] Spawn 20 procedural asteroids
-* [ ] Detect collisions and apply physics responses
-* [ ] Implement laser ray‑cast to destroy asteroids
+* [x] Implement WASD + Mouse flight controls (basic placeholder)
+* [x] Spawn 20 procedural asteroids
+* [x] Detect collisions and apply physics responses
+* [x] Implement laser ray‑cast to destroy asteroids (basic mouse click)
 * [ ] Break asteroids into mineral chunks
 
 ### Milestone 2 – Hauling & Upgrades (Week 3)
@@ -201,6 +201,47 @@ Open two browser tabs → each acts as a different ship once Milestone 3 is com
 
 ---
 
-## 8 · License
+## 8 · Current Status
+
+### 🎉 What's Working Now
+
+The Space Arcade MVP is **up and running**! Here's what you can do:
+
+1. **Client (Three.js)**: Visit http://localhost:5173
+   - ✅ 3D space environment with camera controls
+   - ✅ Green cube spaceship (placeholder)
+   - ✅ 20 procedural asteroids scattered in space
+   - ✅ Click to shoot and destroy asteroids
+   - ✅ Real-time score tracking
+   - ✅ WASD keyboard controls (placeholder logging)
+
+2. **Server (Go WebSocket Hub)**: Running on http://localhost:8080
+   - ✅ WebSocket endpoint at `/ws`
+   - ✅ Client registration and lobby management
+   - ✅ JSON message handling (JOIN, INPUT, STATE)
+   - ✅ 15Hz state broadcasts to connected clients
+   - ✅ Health check endpoint at `/health`
+
+### 🚀 Quick Start
+
+```bash
+# Terminal 1: Start the client
+cd client && npm run dev
+
+# Terminal 2: Start the server  
+cd server && go run ./cmd/spacehub
+
+# Open browser to http://localhost:5173
+```
+
+### 🎯 Next Steps
+
+- **Milestone 1**: Add proper flight controls and asteroid breaking
+- **Milestone 2**: Implement hauler ship and upgrade system
+- **Milestone 4**: Add client-server multiplayer sync
+
+---
+
+## 9 · License
 
 **MIT** – hack, share, have fun. (Replace if your studio needs something else.)
