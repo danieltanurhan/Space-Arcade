@@ -8,8 +8,24 @@ import { shootBullet, updateBullets } from './systems/bulletSystem'
 import { setupInput } from './controls/input'
 import { updateUI } from './ui/hud'
 import { fixedTimeStep } from './config/constants'
+import { NetworkManager } from './network/NetworkManager'
+import { InputSender } from './network/InputSender'
+import { StateReceiver } from './network/StateReceiver'
 
 console.log('🎮 Space Arcade loading...')
+
+const network = new NetworkManager()
+// connect to local dev server; adjust URL as needed
+network.connect('ws://localhost:8080/ws', 'alpha-field-01')
+const inputSender = new InputSender(network)
+inputSender.start()
+
+// example log latency
+network.on('latency', (ms) => {
+  console.log(`Latency: ${ms.toFixed(1)}ms`)
+})
+
+new StateReceiver(network)
 
 initEngine()
 createSpaceStation()

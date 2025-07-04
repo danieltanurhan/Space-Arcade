@@ -1,0 +1,28 @@
+export enum MessageType {
+  // Connection
+  JOIN = 'JOIN',
+  JOINED = 'JOINED',
+  LEAVE = 'LEAVE',
+  PLAYER_JOINED = 'PLAYER_JOINED',
+  PLAYER_LEFT = 'PLAYER_LEFT',
+
+  // Input
+  INPUT = 'INPUT',
+  INPUT_ACK = 'INPUT_ACK',
+
+  // State
+  STATE = 'STATE',
+  STATE_DELTA = 'STATE_DELTA',
+
+  // Events
+  ENTITY_SPAWN = 'ENTITY_SPAWN',
+  ENTITY_DESTROY = 'ENTITY_DESTROY',
+  WORLD_EVENT = 'WORLD_EVENT',
+
+  // System
+  PING = 'PING',
+  PONG = 'PONG',
+  ERROR = 'ERROR',
+  SYNC_REQUEST = 'SYNC_REQUEST',
+  SYNC_RESPONSE = 'SYNC_RESPONSE',
+}
