@@ -13,9 +13,57 @@ export interface Bullet {
   mesh: THREE.Mesh
   velocity: THREE.Vector3
   spawnTime: number
+  id?: number
 }
 
 const bullets: Bullet[] = []
+
+export const bulletById: Map<number, Bullet> = new Map()
+
+export interface ServerBulletEntity {
+  id: number
+  x: number
+  y: number
+  z: number
+  vx?: number
+  vy?: number
+  vz?: number
+}
+
+export function syncBulletsFromServer(serverBullets: ServerBulletEntity[]) {
+  const seen = new Set<number>()
+
+  serverBullets.forEach((b) => {
+    let bullet = bulletById.get(b.id)
+    if (!bullet) {
+      // Create new bullet mesh
+      const bulletGeo = new THREE.CylinderGeometry(0.05, 0.05, 2, 8)
+      const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 })
+      const mesh = new THREE.Mesh(bulletGeo, bulletMat)
+      mesh.castShadow = true
+      scene.add(mesh)
+      bullet = { mesh, velocity: new THREE.Vector3(), spawnTime: performance.now() / 1000, id: b.id }
+      bullets.push(bullet)
+      bulletById.set(b.id, bullet)
+    }
+
+    // Update transform
+    bullet.mesh.position.set(b.x, b.y, b.z)
+    bullet.velocity.set(b.vx ?? 0, b.vy ?? 0, b.vz ?? 0)
+    seen.add(b.id)
+  })
+
+  // Remove bullets not in list
+  for (const [id, bullet] of [...bulletById.entries()]) {
+    if (!seen.has(id)) {
+      scene.remove(bullet.mesh)
+      bulletById.delete(id)
+      const idx = bullets.indexOf(bullet)
+      if (idx !== -1) bullets.splice(idx, 1)
+    }
+  }
+}
+
 let lastShotTime = 0
 
 export function shootBullet() {

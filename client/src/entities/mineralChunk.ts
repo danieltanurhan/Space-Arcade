@@ -13,9 +13,66 @@ export interface MineralChunk {
   purity: number // 0.1 - 1.0
   mass: number
   spawnTime: number
+  id?: number
 }
 
 export const mineralChunks: MineralChunk[] = []
+export const mineralChunkById: Map<number, MineralChunk> = new Map()
+
+export interface ServerMineralChunkEntity {
+  id: number
+  type: MineralType
+  x: number
+  y: number
+  z: number
+  vx?: number
+  vy?: number
+  vz?: number
+  size?: number
+  purity?: number
+}
+
+export function syncMineralChunksFromServer(serverChunks: ServerMineralChunkEntity[]) {
+  const seen = new Set<number>()
+
+  serverChunks.forEach((c) => {
+    let chunk = mineralChunkById.get(c.id)
+    if (!chunk) {
+      // Create new chunk
+      const position = new THREE.Vector3(c.x, c.y, c.z)
+      const velocity = new THREE.Vector3(c.vx ?? 0, c.vy ?? 0, c.vz ?? 0)
+      const created = createMineralChunk(
+        position,
+        velocity,
+        c.type,
+        c.size ?? 0.5
+      )
+      created.id = c.id
+      mineralChunkById.set(c.id, created)
+      chunk = created
+    }
+
+    // Update existing chunk transform
+    chunk.mesh.position.set(c.x, c.y, c.z)
+    chunk.body.position.copy(chunk.mesh.position as any)
+    if (c.vx !== undefined) {
+      chunk.body.velocity.set(c.vx, c.vy ?? 0, c.vz ?? 0)
+    }
+
+    seen.add(c.id)
+  })
+
+  // Remove chunks that no longer exist
+  for (const [id, chunk] of [...mineralChunkById.entries()]) {
+    if (!seen.has(id)) {
+      scene.remove(chunk.mesh)
+      world.removeBody(chunk.body)
+      mineralChunkById.delete(id)
+      const idx = mineralChunks.indexOf(chunk)
+      if (idx !== -1) mineralChunks.splice(idx, 1)
+    }
+  }
+}
 
 // Mineral properties for different types
 const mineralProperties = {
