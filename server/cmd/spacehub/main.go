@@ -115,6 +115,60 @@ func newHub() *Hub {
 	}
 }
 
+// sendToLobby delivers raw JSON bytes to every client currently in the lobby.
+func (h *Hub) sendToLobby(lobby string, data []byte) {
+	for _, c := range h.lobbies[lobby] {
+		select {
+		case c.send <- data:
+		default:
+		}
+	}
+}
+
+// sendError sends an ERROR message to a single client.
+func (h *Hub) sendError(c *Client, code, msg string, details interface{}) {
+	payload := struct {
+		Code    string      `json:"code"`
+		Message string      `json:"message"`
+		Details interface{} `json:"details,omitempty"`
+	}{Code: code, Message: msg, Details: details}
+	data, _ := proto.Wrap(proto.MsgError, 0, payload)
+	c.send <- data
+}
+
+// spawnEntity adds entity to lobby state and notifies clients.
+func (h *Hub) spawnEntity(lobby string, ent Entity) {
+	h.gameState[lobby] = append(h.gameState[lobby], ent)
+	// notify
+	evt := struct {
+		Entity Entity `json:"entity"`
+	}{Entity: ent}
+	data, _ := proto.Wrap(proto.MsgEntitySpawn, 0, evt)
+	h.sendToLobby(lobby, data)
+}
+
+// destroyEntity removes entity from lobby state by id and notifies clients.
+func (h *Hub) destroyEntity(lobby string, id int, reason string, destroyer int) {
+	ents := h.gameState[lobby]
+	idx := -1
+	for i, e := range ents {
+		if e.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		h.gameState[lobby] = append(ents[:idx], ents[idx+1:]...)
+	}
+	evt := struct {
+		EntityID    int    `json:"entityId"`
+		Reason      string `json:"reason"`
+		DestroyerID int    `json:"destroyerId,omitempty"`
+	}{EntityID: id, Reason: reason, DestroyerID: destroyer}
+	data, _ := proto.Wrap(proto.MsgEntityDestroy, 0, evt)
+	h.sendToLobby(lobby, data)
+}
+
 func (h *Hub) run() {
 	ticker := time.NewTicker(66 * time.Millisecond) // ~15 Hz state updates
 	defer ticker.Stop()
@@ -180,6 +234,17 @@ func (h *Hub) addToLobby(client *Client, lobby string) {
 	payload, _ := proto.Wrap(proto.MsgJoined, uint32(time.Now().Unix()), joined)
 	client.send <- payload
 
+	// Broadcast PLAYER_JOINED to other clients in lobby (excluding new client)
+	pj := struct {
+		ClientID int `json:"clientId"`
+	}{ClientID: client.id}
+	data, _ := proto.Wrap(proto.MsgPlayerJoined, 0, pj)
+	for _, c := range h.lobbies[lobby] {
+		if c != client {
+			select { case c.send <- data: default: }
+		}
+	}
+
 	log.Printf("Client %d joined lobby %s", client.id, lobby)
 }
 
@@ -200,6 +265,16 @@ func (h *Hub) removeFromLobby(client *Client) {
 	if len(h.lobbies[client.lobby]) == 0 {
 		delete(h.lobbies, client.lobby)
 		delete(h.gameState, client.lobby)
+	}
+
+	// Broadcast PLAYER_LEFT to remaining clients
+	if client.lobby != "" {
+		pl := struct {
+			ClientID int    `json:"clientId"`
+			Reason   string `json:"reason"`
+		}{ClientID: client.id, Reason: "disconnect"}
+		data, _ := proto.Wrap(proto.MsgPlayerLeft, 0, pl)
+		h.sendToLobby(client.lobby, data)
 	}
 }
 
@@ -421,10 +496,24 @@ func (c *Client) handleMessage(data []byte) {
 			log.Printf("Error parsing INPUT message: %v", err)
 			return
 		}
+		// Process input (gameplay logic placeholder)
 		c.lastSeq = int(msg.Seq)
-		// TODO: Process input (Milestone 4)
-		log.Printf("Client %d input: throttle=%.2f, pitch=%.2f, fire=%v", 
-			c.id, msg.Data.Movement.X, msg.Data.Rotation.Pitch, msg.Data.Actions.Shoot)
+		// Send INPUT_ACK
+		ack := struct {
+			InputSeq    uint32 `json:"inputSeq"`
+			Processed   bool   `json:"processed"`
+			ServerTime  int64  `json:"serverTime"`
+		}{InputSeq: msg.Seq, Processed: true, ServerTime: time.Now().UnixMilli()}
+		payload, _ := proto.Wrap(proto.MsgInputAck, 0, ack)
+		c.send <- payload
+
+		log.Printf("Client %d input seq=%d processed", c.id, msg.Seq)
+
+		log.Printf("Client %d input: move(%.2f, %.2f, %.2f) shoot=%v", 
+			c.id, msg.Data.Movement.X, msg.Data.Movement.Y, msg.Data.Movement.Z, msg.Data.Actions.Shoot)
+
+	default:
+		c.hub.sendError(c, "UNKNOWN_TYPE", "Unsupported message type", map[string]string{"type": string(baseMsg.Type)})
 	}
 }
 
