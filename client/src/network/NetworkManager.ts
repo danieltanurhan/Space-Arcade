@@ -119,6 +119,9 @@ export class NetworkManager {
       case MessageType.ERROR:
         console.error('Server error', msg)
         break
+      case MessageType.INPUT_ACK:
+        this.emitter.emit('INPUT_ACK', msg)
+        break
     }
   }
 

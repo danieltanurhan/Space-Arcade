@@ -11,6 +11,9 @@ import { fixedTimeStep } from './config/constants'
 import { NetworkManager } from './network/NetworkManager'
 import { InputSender } from './network/InputSender'
 import { StateReceiver } from './network/StateReceiver'
+import { updateLatency, updateConnectionState } from './network/networkStats'
+import { MessageType } from './network/MessageTypes'
+import { showError } from './ui/notifications'
 
 console.log('🎮 Space Arcade loading...')
 
@@ -22,7 +25,15 @@ inputSender.start()
 
 // example log latency
 network.on('latency', (ms) => {
-  console.log(`Latency: ${ms.toFixed(1)}ms`)
+  updateLatency(ms)
+})
+
+network.on('state', (state) => {
+  updateConnectionState(state)
+})
+
+network.on(MessageType.ERROR, (msg) => {
+  showError(msg.data?.message || 'Server error')
 })
 
 new StateReceiver(network)

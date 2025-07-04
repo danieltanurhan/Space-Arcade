@@ -3,6 +3,7 @@ import { asteroids } from '../entities/asteroid'
 import { mineralChunks } from '../entities/mineralChunk'
 import { spaceships } from '../entities/spaceship'
 import { isNearSpaceStation } from '../entities/spaceStation'
+import { latency, connectionState } from '../network/networkStats'
 
 export function updateUI() {
   const el = document.getElementById('stats')
@@ -45,6 +46,10 @@ export function updateUI() {
       <div style="margin-bottom: 4px;">⚪ Rare Metals: ${chunkCounts.rare_metals}</div>
       <div style="margin-bottom: 4px;">💎 Crystals: ${chunkCounts.crystals}</div>
       
+      <h4 style="margin: 0 0 8px 0; color: #00aaff;">📡 Network</h4>
+      <div style="margin-bottom: 4px;">Status: ${connectionState}</div>
+      <div style="margin-bottom: 4px;">Latency: ${latency.toFixed(1)} ms</div>
+
       <div style="margin-top: 12px; font-size: 0.9em; color: #888888;">
         Fly close to mineral chunks to collect them!
       </div>
