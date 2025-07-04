@@ -69,17 +69,7 @@ type StateMessage struct {
 	} `json:"data"`
 }
 
-type Entity struct {
-	ID   int     `json:"id"`
-	Type string  `json:"type,omitempty"`
-	X    float64 `json:"x"`
-	Y    float64 `json:"y"`
-	Z    float64 `json:"z"`
-	VX   float64 `json:"vx"`
-	VY   float64 `json:"vy"`
-	VZ   float64 `json:"vz"`
-	HP   int     `json:"hp,omitempty"`
-}
+type Entity = proto.Entity
 
 // WebSocket upgrader
 var upgrader = websocket.Upgrader{
