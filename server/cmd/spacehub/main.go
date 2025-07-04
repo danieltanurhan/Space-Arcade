@@ -11,36 +11,61 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/gorilla/websocket"
+
+	proto "space-arcade-server/internal/protocol"
 )
 
-// Message types as defined in README
-type MessageType string
+// Re-export protocol message types locally for convenience
+type MessageType = proto.MessageType
 
 const (
-	MsgJoin  MessageType = "JOIN"
-	MsgInput MessageType = "INPUT"
-	MsgState MessageType = "STATE"
+	MsgJoin  MessageType = proto.MsgJoin
+	MsgInput MessageType = proto.MsgInput
+	MsgState MessageType = proto.MsgState
 )
 
-// Client messages (Client → Server)
+// JoinMessage follows the protocol envelope with an inner data object.
 type JoinMessage struct {
-	Type  MessageType `json:"type"`
-	Lobby string      `json:"lobby"`
+	Type      MessageType `json:"type"`
+	Timestamp int64       `json:"timestamp"`
+	Seq       uint32      `json:"seq"`
+	Data      struct {
+		Lobby string `json:"lobby"`
+		Role  string `json:"role,omitempty"`
+		// Additional fields (playerName, version) are ignored for now
+	} `json:"data"`
 }
 
 type InputMessage struct {
-	Type     MessageType `json:"type"`
-	Seq      int         `json:"seq"`
-	Throttle float64     `json:"throttle"`
-	Pitch    float64     `json:"pitch"`
-	Fire     bool        `json:"fire"`
+	Type      MessageType `json:"type"`
+	Timestamp int64       `json:"timestamp"`
+	Seq       uint32      `json:"seq"`
+	Data      struct {
+		Movement struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"movement"`
+		Rotation struct {
+			Pitch float64 `json:"pitch"`
+			Yaw   float64 `json:"yaw"`
+		} `json:"rotation"`
+		Actions struct {
+			Shoot   bool   `json:"shoot"`
+			Ability string `json:"ability,omitempty"`
+			Interact bool  `json:"interact,omitempty"`
+		} `json:"actions"`
+	} `json:"data"`
 }
 
 // Server messages (Server → Client)
 type StateMessage struct {
-	Type     MessageType `json:"type"`
-	Seq      int         `json:"seq"`
-	Entities []Entity    `json:"entities"`
+	Type      MessageType `json:"type"`
+	Timestamp int64       `json:"timestamp"`
+	Seq       uint32      `json:"seq"`
+	Data      struct {
+		Entities []Entity `json:"entities"`
+	} `json:"data"`
 }
 
 type Entity struct {
@@ -142,6 +167,24 @@ func (h *Hub) addToLobby(client *Client, lobby string) {
 		h.gameState[lobby] = h.createInitialGameState()
 	}
 	
+	// Inform the client they successfully joined
+	joined := struct {
+		ClientID int `json:"clientId"`
+		Lobby    string `json:"lobby"`
+		SpawnPosition [3]float64 `json:"spawnPosition"`
+		WorldState struct {
+			Entities []Entity `json:"entities"`
+		} `json:"worldState"`
+	}{
+		ClientID: client.id,
+		Lobby: lobby,
+		SpawnPosition: [3]float64{0, 0, 0},
+	}
+	joined.WorldState.Entities = h.gameState[lobby]
+
+	payload, _ := proto.Wrap(proto.MsgJoined, uint32(time.Now().Unix()), joined)
+	client.send <- payload
+
 	log.Printf("Client %d joined lobby %s", client.id, lobby)
 }
 
@@ -191,25 +234,24 @@ func (h *Hub) broadcastGameState() {
 		if len(clients) == 0 {
 			continue
 		}
-		
-		state := StateMessage{
-			Type:     MsgState,
-			Seq:      int(time.Now().Unix()),
-			Entities: h.gameState[lobby],
+
+		statePayload := StateMessage{
+			Type:      proto.MsgState,
+			Timestamp: time.Now().UnixMilli(),
+			Seq:       uint32(time.Now().Unix()),
 		}
-		
-		data, err := json.Marshal(state)
+		statePayload.Data.Entities = h.gameState[lobby]
+
+		data, err := json.Marshal(statePayload)
 		if err != nil {
 			log.Printf("Error marshaling state: %v", err)
 			continue
 		}
-		
-		// Send to all clients in this lobby
+
 		for _, client := range clients {
 			select {
 			case client.send <- data:
 			default:
-				// Client send channel is full, skip
 			}
 		}
 	}
@@ -310,7 +352,7 @@ func (c *Client) handleMessage(data []byte) {
 			log.Printf("Error parsing JOIN message: %v", err)
 			return
 		}
-		c.hub.addToLobby(c, msg.Lobby)
+		c.hub.addToLobby(c, msg.Data.Lobby)
 		
 	case MsgInput:
 		var msg InputMessage
@@ -318,10 +360,10 @@ func (c *Client) handleMessage(data []byte) {
 			log.Printf("Error parsing INPUT message: %v", err)
 			return
 		}
-		c.lastSeq = msg.Seq
+		c.lastSeq = int(msg.Seq)
 		// TODO: Process input (Milestone 4)
 		log.Printf("Client %d input: throttle=%.2f, pitch=%.2f, fire=%v", 
-			c.id, msg.Throttle, msg.Pitch, msg.Fire)
+			c.id, msg.Data.Movement.X, msg.Data.Rotation.Pitch, msg.Data.Actions.Shoot)
 	}
 }
 
