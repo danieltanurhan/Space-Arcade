@@ -10,6 +10,7 @@ export interface Asteroid {
   body: CANNON.Body
   size: number
   mineralComposition: MineralType[]
+  id?: number
 }
 
 export const asteroids: Asteroid[] = []
@@ -107,7 +108,7 @@ export function createAsteroidField(count = 30) {
   }
 }
 
-function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneType) {
+function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneType, id?: number) {
   const zoneProps = zoneProperties[zoneType]
   const geometry = new THREE.IcosahedronGeometry(size, 1)
 
@@ -160,7 +161,8 @@ function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneTyp
     mesh: asteroid, 
     body, 
     size,
-    mineralComposition
+    mineralComposition,
+    id
   })
 }
 
@@ -211,5 +213,51 @@ export function syncAsteroids() {
   asteroids.forEach((a) => {
     a.mesh.position.copy(a.body.position as any)
     a.mesh.quaternion.copy(a.body.quaternion as any)
+  })
+}
+
+// --- Multiplayer helpers ----------------------------------------------------
+
+export interface ServerAsteroidEntity {
+  id: number
+  x: number
+  y: number
+  z: number
+  size?: number
+  zoneType?: string
+}
+
+/**
+ * Replace local asteroids with the authoritative list from the server.
+ * This naive implementation destroys all existing asteroids and recreates
+ * them using the data provided by the server. In the future we can optimise
+ * this to only apply diffs, but for now it guarantees both clients see the
+ * exact same set.
+ */
+export function syncAsteroidsFromServer(serverEntities: ServerAsteroidEntity[]) {
+  // Remove all existing asteroids
+  while (asteroids.length > 0) {
+    const a = asteroids.pop()!
+    scene.remove(a.mesh)
+    world.removeBody(a.body)
+  }
+
+  // Create new asteroids from authoritative state
+  serverEntities.forEach((e) => {
+    // Support both camelCase (x) and PascalCase (X) from the Go server
+    const x = (e as any).x ?? (e as any).X ?? 0
+    const y = (e as any).y ?? (e as any).Y ?? 0
+    const z = (e as any).z ?? (e as any).Z ?? 0
+    const position = new THREE.Vector3(x, y, z)
+    const size = e.size ?? 2
+    // Attempt to map zoneType string to enum, fallback if unknown
+    let zone: ZoneType = ZoneType.DEBRIS_FIELD
+    if (e.zoneType) {
+      const key = e.zoneType.toUpperCase() as keyof typeof ZoneType
+      if (ZoneType[key]) {
+        zone = ZoneType[key]
+      }
+    }
+    createAsteroid(position, size, zone, e.id)
   })
 }
