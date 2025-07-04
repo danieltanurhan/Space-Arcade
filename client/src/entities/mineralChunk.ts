@@ -25,11 +25,16 @@ const mineralProperties = {
   crystals: { color: 0x9932CC, value: 25, rarity: 0.1 }
 }
 
+export function createMineralChunkRemote(position: THREE.Vector3, type: MineralType, size: number = 0.5) {
+  return createMineralChunk(position, new THREE.Vector3(), type, size, true)
+}
+
 export function createMineralChunk(
   position: THREE.Vector3,
   velocity: THREE.Vector3,
   type: MineralType,
-  size: number = 0.5
+  size: number = 0.5,
+  noPhysics = false
 ): MineralChunk {
   const purity = 0.3 + Math.random() * 0.7 // 0.3 to 1.0
   const mass = size * purity
@@ -61,32 +66,31 @@ export function createMineralChunk(
   mesh.receiveShadow = true
   scene.add(mesh)
   
-  // Create physics body
-  const shape = new CANNON.Sphere(size * 0.8)
-  const body = new CANNON.Body({ mass: mass * 5 })
-  body.addShape(shape)
-  body.position.copy(position as any)
-  body.velocity.copy(velocity as any)
-  
-  // Add some angular velocity for spinning
-  body.angularVelocity.set(
-    (Math.random() - 0.5) * 4,
-    (Math.random() - 0.5) * 4,
-    (Math.random() - 0.5) * 4
-  )
-  
-  world.addBody(body)
+  let body: CANNON.Body | null = null
+  if (!noPhysics) {
+    const shape = new CANNON.Sphere(size * 0.8)
+    body = new CANNON.Body({ mass: mass * 5 })
+    body.addShape(shape)
+    body.position.copy(position as any)
+    body.velocity.copy(velocity as any)
+    body.angularVelocity.set(
+      (Math.random() - 0.5) * 4,
+      (Math.random() - 0.5) * 4,
+      (Math.random() - 0.5) * 4
+    )
+    world.addBody(body)
+  }
   
   const chunk: MineralChunk = {
     mesh,
-    body,
+    body: body!,
     type,
     purity,
     mass,
     spawnTime: performance.now() / 1000
   }
   
-  mineralChunks.push(chunk)
+  if (!noPhysics) mineralChunks.push(chunk)
   return chunk
 }
 

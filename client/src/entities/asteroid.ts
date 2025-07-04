@@ -107,7 +107,11 @@ export function createAsteroidField(count = 30) {
   }
 }
 
-function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneType) {
+export function createAsteroidRemote(position: THREE.Vector3, size: number, zoneType: ZoneType) {
+  return createAsteroid(position, size, zoneType, true)
+}
+
+function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneType, noPhysics = false) {
   const zoneProps = zoneProperties[zoneType]
   const geometry = new THREE.IcosahedronGeometry(size, 1)
 
@@ -142,11 +146,14 @@ function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneTyp
   asteroid.receiveShadow = true
   scene.add(asteroid)
 
-  const shape = new CANNON.Sphere(size)
-  const body = new CANNON.Body({ mass: size * 10 })
-  body.addShape(shape)
-  body.position.copy(asteroid.position as any)
-  world.addBody(body)
+  let body: CANNON.Body | null = null
+  if (!noPhysics) {
+    const shape = new CANNON.Sphere(size)
+    body = new CANNON.Body({ mass: size * 10 })
+    body.addShape(shape)
+    body.position.copy(asteroid.position as any)
+    world.addBody(body)
+  }
 
   // Generate mineral composition based on zone
   const mineralComposition: MineralType[] = []
@@ -156,12 +163,15 @@ function createAsteroid(position: THREE.Vector3, size: number, zoneType: ZoneTyp
     mineralComposition.push(selectMineralType(zoneProps.mineralDistribution))
   }
 
-  asteroids.push({ 
-    mesh: asteroid, 
-    body, 
-    size,
-    mineralComposition
-  })
+  if (!noPhysics) {
+    asteroids.push({ 
+      mesh: asteroid, 
+      body: body!, 
+      size,
+      mineralComposition
+    })
+  }
+  return { mesh: asteroid }
 }
 
 export function destroyAsteroid(asteroidMesh: THREE.Mesh) {

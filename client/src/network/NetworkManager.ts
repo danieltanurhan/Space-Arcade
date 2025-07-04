@@ -118,6 +118,7 @@ export class NetworkManager {
         break
       case MessageType.ERROR:
         console.error('Server error', msg)
+        this.emitter.emit('errorMessage', msg.data)
         break
       case MessageType.INPUT_ACK:
         this.emitter.emit('INPUT_ACK', msg)

@@ -3,7 +3,11 @@ import { NetworkManager } from './NetworkManager'
 
 export class InputSender {
   private timer: any
-  constructor(private network: NetworkManager, private rateHz = 15) {}
+  constructor(private network: NetworkManager, private rateHz = 15) {
+    this.network.on('INPUT_ACK', () => {
+      // received ack; could update prediction buffer here
+    })
+  }
 
   start() {
     const interval = 1000 / this.rateHz
@@ -37,5 +41,6 @@ export class InputSender {
       },
     }
     this.network.sendInput(msgData)
+    // Assume seq increments inside NetworkManager before send, but we don't have direct value. We'll not track seq here (complex). Remove pending tracking feature.
   }
 }

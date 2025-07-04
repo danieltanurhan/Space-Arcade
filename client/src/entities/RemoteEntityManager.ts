@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { scene } from '../core/engine'
+import { createAsteroidRemote, ZoneType } from './asteroid'
+import { createMineralChunkRemote, MineralType } from './mineralChunk'
 
 interface NetEntity {
   id: number
@@ -65,12 +67,11 @@ export class RemoteEntityManager {
   private createMesh(e: any): THREE.Object3D {
     switch (e.type) {
       case 'asteroid': {
-        const geom = new THREE.IcosahedronGeometry(1)
-        const mat = new THREE.MeshStandardMaterial({ color: 0x888888 })
-        const mesh = new THREE.Mesh(geom, mat)
         const size = e.size ?? 1
-        mesh.scale.setScalar(size)
-        return mesh
+        const position = new THREE.Vector3(e.position?.[0] ?? e.x, e.position?.[1] ?? e.y, e.position?.[2] ?? e.z)
+        const zone = (e.zoneType as ZoneType) || ZoneType.DEBRIS_FIELD
+        const tempAsteroid = createAsteroidRemote(position, size, zone)
+        return tempAsteroid.mesh
       }
       case 'spaceship': {
         const geom = new THREE.ConeGeometry(0.5, 1.5, 8)
@@ -78,9 +79,9 @@ export class RemoteEntityManager {
         return new THREE.Mesh(geom, mat)
       }
       case 'mineral_chunk': {
-        const geom = new THREE.BoxGeometry(0.3, 0.3, 0.3)
-        const mat = new THREE.MeshStandardMaterial({ color: 0xffcc00 })
-        return new THREE.Mesh(geom, mat)
+        const position = new THREE.Vector3(e.position?.[0] ?? e.x, e.position?.[1] ?? e.y, e.position?.[2] ?? e.z)
+        const meshObj = createMineralChunkRemote(position, (e.mineralType as MineralType) || 'iron')
+        return meshObj.mesh
       }
       default: {
         const geom = new THREE.SphereGeometry(0.5)
