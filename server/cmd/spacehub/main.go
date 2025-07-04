@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	proto "space-arcade-server/internal/protocol"
+	"space-arcade-server/internal/broadcast"
 )
 
 // Re-export protocol message types locally for convenience
@@ -104,8 +105,10 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	lobbies    map[string][]*Client
-	nextID     int
 	gameState  map[string][]Entity // lobby -> entities
+	lastState  map[string][]Entity // previous snapshot per lobby
+	lobbySeq   map[string]uint32   // monotonically increasing seq per lobby
+	nextID     int
 }
 
 func newHub() *Hub {
@@ -116,6 +119,8 @@ func newHub() *Hub {
 		unregister: make(chan *Client),
 		lobbies:    make(map[string][]*Client),
 		gameState:  make(map[string][]Entity),
+		lastState:  make(map[string][]Entity),
+		lobbySeq:   make(map[string]uint32),
 		nextID:     1,
 	}
 }
@@ -235,26 +240,75 @@ func (h *Hub) broadcastGameState() {
 			continue
 		}
 
-		statePayload := StateMessage{
-			Type:      proto.MsgState,
-			Timestamp: time.Now().UnixMilli(),
-			Seq:       uint32(time.Now().Unix()),
-		}
-		statePayload.Data.Entities = h.gameState[lobby]
+		// Increment lobby sequence number
+		h.lobbySeq[lobby]++
 
-		data, err := json.Marshal(statePayload)
-		if err != nil {
-			log.Printf("Error marshaling state: %v", err)
+		curr := h.gameState[lobby]
+		prev := h.lastState[lobby]
+
+		// If no previous snapshot, send full STATE
+		if prev == nil {
+			statePayload := StateMessage{
+				Type:      proto.MsgState,
+				Timestamp: time.Now().UnixMilli(),
+				Seq:       h.lobbySeq[lobby],
+			}
+			statePayload.Data.Entities = curr
+
+			data, _ := json.Marshal(statePayload)
+			for _, client := range clients {
+				select {
+				case client.send <- data:
+				default:
+				}
+			}
+			// Store snapshot for next delta calc
+			h.lastState[lobby] = cloneEntities(curr)
 			continue
 		}
 
+		// Compute delta
+		changed, removed, added := broadcast.ComputeDelta(prev, curr)
+		if len(changed) == 0 && len(removed) == 0 && len(added) == 0 {
+			// No changes, skip sending
+			continue
+		}
+
+		deltaPayload := struct {
+			Type      proto.MessageType `json:"type"`
+			Timestamp int64             `json:"timestamp"`
+			Seq       uint32            `json:"seq"`
+			Data      broadcast.DeltaSnapshot `json:"data"`
+		}{
+			Type:      proto.MsgStateDelta,
+			Timestamp: time.Now().UnixMilli(),
+			Seq:       h.lobbySeq[lobby],
+			Data: broadcast.DeltaSnapshot{
+				BaseSeq: h.lobbySeq[lobby] - 1,
+				Changes: changed,
+				Removed: removed,
+				Added:   added,
+			},
+		}
+
+		data, _ := json.Marshal(deltaPayload)
 		for _, client := range clients {
 			select {
 			case client.send <- data:
 			default:
 			}
 		}
+
+		// Update previous snapshot
+		h.lastState[lobby] = cloneEntities(curr)
 	}
+}
+
+// cloneEntities performs a shallow copy of entity slice to decouple snapshots.
+func cloneEntities(src []Entity) []Entity {
+	out := make([]Entity, len(src))
+	copy(out, src)
+	return out
 }
 
 // WebSocket handler
@@ -354,6 +408,23 @@ func (c *Client) handleMessage(data []byte) {
 		}
 		c.hub.addToLobby(c, msg.Data.Lobby)
 		
+	case proto.MsgPing:
+		// Echo PONG with server time
+		pong := struct {
+			ID string `json:"id"`
+			ServerTime int64 `json:"serverTime"`
+		}{}
+		// Attempt to parse ping id
+		var pingData struct{
+			Data struct{ID string `json:"id"`} `json:"data"`
+		}
+		if err := json.Unmarshal(data, &pingData); err == nil {
+			pong.ID = pingData.Data.ID
+		}
+		pong.ServerTime = time.Now().UnixMilli()
+		payload, _ := proto.Wrap(proto.MsgPong, 0, pong)
+		c.send <- payload
+
 	case MsgInput:
 		var msg InputMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
